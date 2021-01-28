@@ -107,3 +107,37 @@ fn test_SUBSCRIBE_malformed() {
 
     assert_eq!(malformed1, Error::MalformedRequest);
 }
+
+#[test]
+fn test_PUBLISH() {
+    // PUBLISH with Id (Qos = 2)
+    let parsed1 = PUBLISH::from_bytes(hex_bytes!("
+        34 0c 00 05 2f 61 62 63 64 a1 16 31 32 33
+    ")).unwrap();
+    println!("{:?}", parsed1);
+
+    assert_eq!(parsed1.dup, false);
+    assert_eq!(parsed1.qos, Qos::AssuredDelivery);
+    assert_eq!(parsed1.retain, false);
+    assert_eq!(parsed1.topic, "/abcd");
+    assert_eq!(parsed1.id, Some(41238));
+    assert_eq!(parsed1.payload, Bytes::from("123"));
+
+    // PUBLISH without Id (Qos = 0)
+    let parsed2 = PUBLISH::from_bytes(hex_bytes!("
+        30 0c 00 05 2f 61 62 63 64 31 32 33
+    ")).unwrap();
+    println!("{:?}", parsed2);
+
+    assert_eq!(parsed2.id, None);
+    assert_eq!(parsed2.payload, Bytes::from("123"));
+
+    // PUBLISH without Id (Qos == 0) and Payload
+    let parsed3 = PUBLISH::from_bytes(hex_bytes!("
+        30 0c 00 05 2f 61 62 63 64
+    ")).unwrap();
+    println!("{:?}", parsed3);
+
+    assert_eq!(parsed2.id, None);
+    assert!(parsed3.payload.is_empty());
+}

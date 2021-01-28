@@ -113,7 +113,7 @@ pub(crate) enum TextType {
     Topic,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub(crate) enum Qos {
     FireAndForget,
     AcknowledgedDeliver,
@@ -213,6 +213,39 @@ impl RequestFrame for SUBSCRIBE {
             id: usize(&bytes[2..=3]),
             topic: into_text!(Topic whichis consume_item!(cursor of bytes)),
             qos: Qos::from_byte(&bytes[cursor]),
+        })
+    }
+}
+
+pub_struct!(PUBLISH {
+    dup: bool,
+    qos: Qos,
+    retain: bool,
+    topic: String,
+    id: Option<usize>,
+    payload: Bytes,
+});
+
+impl RequestFrame for PUBLISH {
+    fn from_bytes(bytes: Bytes) -> Result<Self, Error> where Self: Sized {
+        let flags = bytes[0];
+        let qos = Qos::from_bits(get_bit!(5, flags), get_bit!(6, flags));
+
+        let mut cursor = 2;
+        let topic = into_text!(Topic whichis consume_item!(cursor of bytes));
+        let maybe_id =
+            (qos > Qos::FireAndForget).if_so(|| {
+                cursor += 2;
+                Ok(usize(&bytes[(cursor - 2)..cursor]))
+            });
+
+        Ok(PUBLISH {
+            dup: get_bit!(4, flags),
+            qos,
+            retain: get_bit!(7, flags),
+            topic,
+            id: unpack!(maybe_id),
+            payload: Bytes::copy_from_slice(&bytes[cursor..]),
         })
     }
 }
