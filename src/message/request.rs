@@ -1,6 +1,7 @@
 use std::{fmt, string};
 use bytes::Bytes;
 use thiserror::Error;
+use crate::util::ext::BoolExt;
 
 macro_rules! get_bit {
     ($pos:expr, $subject:expr) => { ($subject & (0b1000_0000 >> $pos) != 0) };
@@ -79,26 +80,12 @@ fn usize(bytes: &[u8]) -> usize {
     out
 }
 
-trait BoolExt {
-    fn if_so<F, R>(self, f: F) -> Option<R> where F: FnMut() -> R;
-}
-
-impl BoolExt for bool {
-    fn if_so<F, R>(self, mut f: F) -> Option<R> where F: FnMut() -> R {
-        if self {
-            Some(f())
-        } else {
-            None
-        }
-    }
-}
-
-pub(crate) struct Message {}
+pub(crate) struct Request {}
 
 struct Frame {}
 
 #[derive(Error, Debug, PartialEq)]
-pub(crate) enum Error {
+pub enum Error {
     #[error("malformed request received. corresponding TCP connection will be closed according to MQTT 3.1.1 spec.")]
     MalformedRequest,
     #[error("non-UTF8 text in {0:?} received")]
@@ -106,7 +93,7 @@ pub(crate) enum Error {
 }
 
 #[derive(Debug, PartialEq)]
-pub(crate) enum TextType {
+pub enum TextType {
     ClientId,
     WillTopic,
     Username,
@@ -114,7 +101,7 @@ pub(crate) enum TextType {
 }
 
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq)]
-pub(crate) enum Qos {
+pub enum Qos {
     FireAndForget,
     AcknowledgedDeliver,
     AssuredDelivery,
@@ -140,7 +127,7 @@ impl Qos {
     }
 }
 
-pub(crate) trait RequestFrame {
+pub trait RequestFrame {
     fn from_bytes(bytes: Bytes) -> Result<Self, Error> where Self: Sized;
 }
 
@@ -169,7 +156,7 @@ impl RequestFrame for CONNECT {
         let client_id = into_text!(ClientId whichis consume_item!(cursor of bytes));
 
         let maybe_will =
-            get_bit!(5, connect_flags).if_so(|| {
+            get_bit!(5, connect_flags).if_so_then(|| {
                 Ok(Will {
                     qos: Qos::from_bits(get_bit!(3, connect_flags), get_bit!(4, connect_flags)),
                     retain: get_bit!(2, connect_flags),
@@ -179,11 +166,11 @@ impl RequestFrame for CONNECT {
             });
 
         let maybe_username =
-            get_bit!(0, connect_flags).if_so(|| {
+            get_bit!(0, connect_flags).if_so_then(|| {
                 Ok(into_text!(Username whichis consume_item!(cursor of bytes)))
             });
         let maybe_password =
-            get_bit!(1, connect_flags).if_so(|| {
+            get_bit!(1, connect_flags).if_so_then(|| {
                 Ok(Bytes::copy_from_slice(consume_item!(cursor of bytes)))
             });
 
@@ -234,7 +221,7 @@ impl RequestFrame for PUBLISH {
         let mut cursor = 2;
         let topic = into_text!(Topic whichis consume_item!(cursor of bytes));
         let maybe_id =
-            (qos > Qos::FireAndForget).if_so(|| {
+            (qos > Qos::FireAndForget).if_so_then(|| {
                 cursor += 2;
                 Ok(usize(&bytes[(cursor - 2)..cursor]))
             });

@@ -1,8 +1,8 @@
 #![allow(non_snake_case)]
 
-use crate::context::message::*;
 use bytes::Bytes;
 use hex_literal::hex;
+use super::request::*;
 
 macro_rules! hex_bytes {
     ($data:literal) => {

@@ -1,67 +1,70 @@
+use std::collections::HashMap;
+use std::rc::Rc;
 use tokio::sync::mpsc::{self, error::SendError};
-use regex::Regex;
-use crate::context::Message;
+use crate::message::Request;
+use crate::util::ext::BoolExt;
 
 pub(crate) struct WorkerManager {
     workers: Box<dyn WorkerRepository>
 }
 
 impl WorkerManager {
-    async fn dispatch(&self, topic: &str, message: Message) -> Result<(), SendError<Message>> {
-        if let Some(worker) = self.workers.find(topic) {
-            return worker.send(message).await;
+    async fn dispatch(&self, topic: &str, message: Request) -> Result<(), Vec<SendError<Rc<Request>>>> {
+        let handle = Rc::new(message);
+
+        let mut errors = Vec::new();
+        for worker in self.workers.find(topic).iter() {
+            match worker.send(handle.clone()).await {
+                Err(e) => errors.push(e),
+                _ => {}
+            }
         }
 
-        Ok(())
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
     }
 
     fn new() -> WorkerManager {
         WorkerManager {
-            workers: Box::new(TrivialWorkerRepository::new())
+            workers: Box::new(DumbWorkerRepository::new())
         }
     }
 }
 
-type WorkerHandle = mpsc::Sender<Message>;
+type WorkerHandle = mpsc::Sender<Rc<Request>>;
 
 trait WorkerRepository {
-    fn find(&self, topic: &str) -> Option<&WorkerHandle>;
-    fn add(&mut self, topic: &str, worker_handle: WorkerHandle);
+    fn find(&self, topic: &str) -> Vec<&WorkerHandle>;
+    fn add(&mut self, topic: String, worker_handle: WorkerHandle);
     fn remove(&mut self, topic: &str);
     fn new() -> Self where Self: Sized;
 }
 
-struct TrivialWorkerRepository {
-    repository: Vec<(String, WorkerHandle)>
+struct DumbWorkerRepository {
+    repository: HashMap<String, WorkerHandle>
 }
 
-impl WorkerRepository for TrivialWorkerRepository {
-    fn find(&self, topic: &str) -> Option<&WorkerHandle> {
-        let regex =
-            Regex::new(
-                &(topic.replace("+", "([^\\/]+)")
-                    .replace("/", "\\/") + "$")).unwrap();
-
-        for (topic, handle) in self.repository.iter() {
-            if regex.is_match(topic) {
-                return Some(handle);
-            }
-        }
-
-        None
+impl WorkerRepository for DumbWorkerRepository {
+    fn find(&self, topic: &str) -> Vec<&WorkerHandle> {
+        self.repository.iter().filter_map(|(key, value)| {
+            (key == topic).if_so(value)
+        }).collect()
     }
 
-    fn add(&mut self, topic: &str, worker_handle: WorkerHandle) {
-        &mut self.repository.push((topic.to_owned(), worker_handle));
+    fn add(&mut self, topic: String, worker_handle: WorkerHandle) {
+        self.repository.insert(topic, worker_handle);
     }
 
     fn remove(&mut self, topic: &str) {
-        &mut self.repository.retain(|e| e.0 == topic);
+        self.repository.retain(|key, _| key != topic)
     }
 
-    fn new() -> TrivialWorkerRepository {
-        TrivialWorkerRepository {
-            repository: Vec::new()
+    fn new() -> Self where Self: Sized {
+        DumbWorkerRepository {
+            repository: HashMap::new()
         }
     }
 }
