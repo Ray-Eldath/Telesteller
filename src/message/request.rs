@@ -1,6 +1,7 @@
 use std::{fmt, string};
 use bytes::Bytes;
 use thiserror::Error;
+use derive_more::{From, Into};
 use crate::util::ext::BoolExt;
 
 macro_rules! get_bit {
@@ -80,9 +81,23 @@ fn usize(bytes: &[u8]) -> usize {
     out
 }
 
-pub(crate) struct Request {}
+#[derive(From)]
+pub(crate) enum Request {
+    CONNECT(CONNECT),
+    SUBSCRIBE(SUBSCRIBE),
+    PUBLISH(PUBLISH),
+}
 
-struct Frame {}
+impl Request {
+    pub(crate) fn from_bytes(bytes: Bytes) -> Result<Self, Error> {
+        match get!(0, bytes) >> 4 {
+            0b0001 => Ok(CONNECT::from_bytes(bytes)?.into()),
+            0b1000 => Ok(SUBSCRIBE::from_bytes(bytes)?.into()),
+            0b0011 => Ok(PUBLISH::from_bytes(bytes)?.into()),
+            _ => return Err(Error::MalformedRequest)
+        }
+    }
+}
 
 #[derive(Error, Debug, PartialEq)]
 pub enum Error {
@@ -108,21 +123,21 @@ pub enum Qos {
 }
 
 impl Qos {
-    fn from_bits(b1: bool, b2: bool) -> Qos {
+    fn from_bits(b1: bool, b2: bool) -> Result<Qos, Error> {
         match (b1, b2) {
-            (false, false) => Qos::FireAndForget,
-            (false, true) => Qos::AcknowledgedDeliver,
-            (true, false) => Qos::AssuredDelivery,
-            _ => panic!("unexpected bit {}{} incoming Qos::from_bits", bit!(b1), bit!(b2))
+            (false, false) => Ok(Qos::FireAndForget),
+            (false, true) => Ok(Qos::AcknowledgedDeliver),
+            (true, false) => Ok(Qos::AssuredDelivery),
+            _ => Err(Error::MalformedRequest)
         }
     }
 
-    fn from_byte(b: &u8) -> Qos {
+    fn from_byte(b: &u8) -> Result<Qos, Error> {
         match b {
-            0b00 => Qos::FireAndForget,
-            0b01 => Qos::AcknowledgedDeliver,
-            0b10 => Qos::AssuredDelivery,
-            _ => panic!("unexpected byte {:b} incoming Qos::from_byte", b)
+            0b00 => Ok(Qos::FireAndForget),
+            0b01 => Ok(Qos::AcknowledgedDeliver),
+            0b10 => Ok(Qos::AssuredDelivery),
+            _ => Err(Error::MalformedRequest)
         }
     }
 }
@@ -158,7 +173,7 @@ impl RequestFrame for CONNECT {
         let maybe_will =
             get_bit!(5, connect_flags).if_so_then(|| {
                 Ok(Will {
-                    qos: Qos::from_bits(get_bit!(3, connect_flags), get_bit!(4, connect_flags)),
+                    qos: Qos::from_bits(get_bit!(3, connect_flags), get_bit!(4, connect_flags))?,
                     retain: get_bit!(2, connect_flags),
                     topic: into_text!(WillTopic whichis consume_item!(cursor of bytes)),
                     payload: Bytes::copy_from_slice(consume_item!(cursor of bytes)),
@@ -199,7 +214,7 @@ impl RequestFrame for SUBSCRIBE {
         Ok(SUBSCRIBE {
             id: usize(&bytes[2..=3]),
             topic: into_text!(Topic whichis consume_item!(cursor of bytes)),
-            qos: Qos::from_byte(&bytes[cursor]),
+            qos: Qos::from_byte(&bytes[cursor])?,
         })
     }
 }
@@ -216,7 +231,7 @@ pub_struct!(PUBLISH {
 impl RequestFrame for PUBLISH {
     fn from_bytes(bytes: Bytes) -> Result<Self, Error> where Self: Sized {
         let flags = bytes[0];
-        let qos = Qos::from_bits(get_bit!(5, flags), get_bit!(6, flags));
+        let qos = Qos::from_bits(get_bit!(5, flags), get_bit!(6, flags))?;
 
         let mut cursor = 2;
         let topic = into_text!(Topic whichis consume_item!(cursor of bytes));
