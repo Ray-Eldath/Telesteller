@@ -12,10 +12,10 @@ path = "./src/main.rs"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-tokio-util = "0.6"
+tokio-util = { version = "0.6", features = ["full"] }
+tokio-stream = "0.1"
 tracing = "0.1"
 structopt = "0.3"
-regex = "1"
 thiserror = "1.0"
 bytes = "1"
 derive_more = "0.99"

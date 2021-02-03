@@ -3,15 +3,11 @@ use bytes::Bytes;
 use thiserror::Error;
 use derive_more::{From, Into};
 use crate::util::ext::BoolExt;
+#[macro_use]
+use crate::get;
 
 macro_rules! get_bit {
     ($pos:expr, $subject:expr) => { ($subject & (0b1000_0000 >> $pos) != 0) };
-}
-
-macro_rules! get {
-    ($pos:expr, $subject:ident) => {
-        $subject.get($pos).ok_or(Error::MalformedRequest)?
-    };
 }
 
 macro_rules! assert_byte {
@@ -81,7 +77,7 @@ fn usize(bytes: &[u8]) -> usize {
     out
 }
 
-#[derive(From)]
+#[derive(Debug, From)]
 pub(crate) enum Request {
     CONNECT(CONNECT),
     SUBSCRIBE(SUBSCRIBE),
@@ -147,6 +143,7 @@ pub trait RequestFrame {
 }
 
 pub_struct!(CONNECT {
+    protocol_version: u8,
     clean_session: bool,
     keep_alive: usize,
     client_id: String,
@@ -165,6 +162,10 @@ pub_struct!(Will {
 impl RequestFrame for CONNECT {
     fn from_bytes(bytes: Bytes) -> Result<Self, Error> {
         assert_byte!(4 to 7 of get!(0, bytes), 0);
+        if get!(2..=7, bytes) != [0, 4, 77, 81, 84, 84] { // 00 04 M Q T T
+            return Err(Error::MalformedRequest);
+        }
+
         let connect_flags = get!(9, bytes);
 
         let mut cursor = 12;
@@ -190,6 +191,7 @@ impl RequestFrame for CONNECT {
             });
 
         Ok(CONNECT {
+            protocol_version: *get!(8, bytes),
             clean_session: get_bit!(6, connect_flags),
             keep_alive: usize(&bytes[10..=11]),
             client_id,

@@ -42,6 +42,7 @@ fn test_CONNECT() {
                 6e 67 72 61 63 65 66 75 6c 6c 79 20 6f 66 66 6c
                 69 6e 65 2e
             " assert:
+                eq [protocol_version, 4],
                 eq [clean_session, true],
                 eq [keep_alive, 300],
                 eq [client_id, "3e26c465-1319-4e42-8535-17ccc01fec991611762019558"],
@@ -141,14 +142,14 @@ fn test_PUBLISH() {
 
     // PUBLISH without Id (Qos = 0)
     test_success!(
-        test PUBLISH with "30 0c 00 05 2f 61 62 63 64 31 32 33"
+        test PUBLISH with "30 0a 00 05 2f 61 62 63 64 31 32 33"
         assert:
             eq [id, None],
             eq [payload, Bytes::from("123")]);
 
     // PUBLISH without Id (Qos == 0) and Payload
     test_success!(
-        test PUBLISH with "30 0c 00 05 2f 61 62 63 64"
+        test PUBLISH with "30 07 00 05 2f 61 62 63 64"
         assert:
             eq [id, None],
             eq [payload, Bytes::new()]);
