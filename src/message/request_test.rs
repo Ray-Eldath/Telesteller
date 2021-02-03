@@ -2,6 +2,7 @@
 
 use bytes::Bytes;
 use hex_literal::hex;
+use super::Qos;
 use super::request::*;
 use std::ops::Deref;
 

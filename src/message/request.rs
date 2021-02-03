@@ -1,10 +1,13 @@
-use std::{fmt, string};
+use std::string;
+
 use bytes::Bytes;
+use derive_more::From;
 use thiserror::Error;
-use derive_more::{From, Into};
-use crate::util::ext::BoolExt;
+
 #[macro_use]
-use crate::get;
+use crate::{get, pub_struct};
+use crate::message::Qos;
+use crate::util::ext::BoolExt;
 
 macro_rules! get_bit {
     ($pos:expr, $subject:expr) => { ($subject & (0b1000_0000 >> $pos) != 0) };
@@ -37,25 +40,10 @@ macro_rules! unpack {
 macro_rules! consume_item {
     ($cursor:ident of $bytes:ident) => { {
         $cursor += 2;
-        let size = usize(get!(($cursor - 2)..$cursor, $bytes));
+        let size = u16(get!(($cursor - 2)..$cursor, $bytes)) as usize;
         $cursor += size;
         get!(($cursor - size)..$cursor, $bytes)
     } };
-}
-
-macro_rules! bit {
-    ($subject:ident) => {
-        if $subject { "1" } else { "0" }
-    };
-}
-
-macro_rules! pub_struct {
-    ($name:ident { $($field:ident: $t:ty,)*} ) => {
-        #[derive(Debug, PartialEq)]
-        pub(crate) struct $name {
-            $(pub(crate) $field: $t),*
-        }
-    }
 }
 
 macro_rules! into_text {
@@ -67,11 +55,12 @@ macro_rules! into_text {
     };
 }
 
-fn usize(bytes: &[u8]) -> usize {
+#[inline]
+fn u16(bytes: &[u8]) -> u16 {
     let len = bytes.len() - 1;
-    let mut out: usize = 0;
+    let mut out: u16 = 0;
     for (i, b) in bytes.iter().enumerate() {
-        out += (*b as usize) << (8 * (len - i))
+        out += (*b as u16) << (8 * (len - i))
     }
     // println!("received {:?}; result: {}", bytes, out);
     out
@@ -111,14 +100,8 @@ pub enum TextType {
     Topic,
 }
 
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq)]
-pub enum Qos {
-    FireAndForget,
-    AcknowledgedDeliver,
-    AssuredDelivery,
-}
-
 impl Qos {
+    #[inline]
     fn from_bits(b1: bool, b2: bool) -> Result<Qos, Error> {
         match (b1, b2) {
             (false, false) => Ok(Qos::FireAndForget),
@@ -128,6 +111,7 @@ impl Qos {
         }
     }
 
+    #[inline]
     fn from_byte(b: &u8) -> Result<Qos, Error> {
         match b {
             0b00 => Ok(Qos::FireAndForget),
@@ -145,7 +129,7 @@ pub trait RequestFrame {
 pub_struct!(CONNECT {
     protocol_version: u8,
     clean_session: bool,
-    keep_alive: usize,
+    keep_alive: u16,
     client_id: String,
     will: Option<Will>,
     username: Option<String>,
@@ -193,7 +177,7 @@ impl RequestFrame for CONNECT {
         Ok(CONNECT {
             protocol_version: *get!(8, bytes),
             clean_session: get_bit!(6, connect_flags),
-            keep_alive: usize(&bytes[10..=11]),
+            keep_alive: u16(&bytes[10..=11]),
             client_id,
             will: unpack!(maybe_will),
             username: unpack!(maybe_username),
@@ -203,7 +187,7 @@ impl RequestFrame for CONNECT {
 }
 
 pub_struct!(SUBSCRIBE {
-    id: usize,
+    id: u16,
     topic: String,
     qos: Qos,
 });
@@ -214,7 +198,7 @@ impl RequestFrame for SUBSCRIBE {
 
         let mut cursor = 4;
         Ok(SUBSCRIBE {
-            id: usize(&bytes[2..=3]),
+            id: u16(&bytes[2..=3]),
             topic: into_text!(Topic whichis consume_item!(cursor of bytes)),
             qos: Qos::from_byte(&bytes[cursor])?,
         })
@@ -226,7 +210,7 @@ pub_struct!(PUBLISH {
     qos: Qos,
     retain: bool,
     topic: String,
-    id: Option<usize>,
+    id: Option<u16>,
     payload: Bytes,
 });
 
@@ -240,7 +224,7 @@ impl RequestFrame for PUBLISH {
         let maybe_id =
             (qos > Qos::FireAndForget).if_so_then(|| {
                 cursor += 2;
-                Ok(usize(&bytes[(cursor - 2)..cursor]))
+                Ok(u16(&bytes[(cursor - 2)..cursor]))
             });
 
         Ok(PUBLISH {

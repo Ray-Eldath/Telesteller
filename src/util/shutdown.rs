@@ -1,5 +1,4 @@
 use tokio::sync::broadcast;
-use tokio::sync::broadcast::error::RecvError;
 
 pub(crate) struct Shutdown {
     shutdown: bool,
