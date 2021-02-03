@@ -1,10 +1,12 @@
 #![allow(non_snake_case)]
 
+use std::ops::Deref;
+
 use bytes::Bytes;
 use hex_literal::hex;
+
 use super::Qos;
 use super::request::*;
-use std::ops::Deref;
 
 macro_rules! hex_bytes {
     ($data:literal) => {

@@ -1,18 +1,36 @@
-use tokio_util::codec::{Decoder, Encoder, Framed};
-use bytes::{BytesMut, Bytes, Buf};
-use thiserror::Error;
 use std::io;
-use crate::message::{Request, request::Error};
+
+use bytes::{Buf, Bytes, BytesMut};
+use thiserror::Error;
+use tokio_util::codec::{Decoder, Encoder, Framed};
+
 #[macro_use]
 use crate::get;
+use crate::message::{Request, ResponseFrame};
 
 pub(crate) struct MQTT311;
+
+#[derive(Error, Debug)]
+pub(crate) enum EncodeError {
+    #[error("err {0} occurred while marshalling a Response.")]
+    Marshalling(#[from] super::response::Error),
+    #[error("IOError {0} occurred while reading the bitstream.")]
+    IO(#[from] std::io::Error),
+}
+
+impl Encoder<Box<dyn ResponseFrame>> for MQTT311 {
+    type Error = EncodeError;
+
+    fn encode(&mut self, item: Box<dyn ResponseFrame>, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        item.to_bytes(dst).map_err(|e| e.into())
+    }
+}
 
 #[derive(Error, Debug)]
 pub(crate) enum DecodeError {
     #[error("err {0} occurred while parsing frame.")]
     Parsing(#[from] super::request::Error),
-    #[error("IOError {0} occurred while reading the frame.")]
+    #[error("IOError {0} occurred while reading the bitstream.")]
     IO(#[from] std::io::Error),
 }
 

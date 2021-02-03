@@ -1,4 +1,6 @@
 use bytes::{BufMut, BytesMut};
+use derive_more::From;
+use thiserror::Error;
 
 #[macro_use]
 use crate::pub_struct;
@@ -29,11 +31,15 @@ pub(super) fn put_length(x: usize, dst: &mut BytesMut) {
 }
 
 fn write_frame(header: u8, data: &[u8], dst: &mut BytesMut) {
+    let len = data.len();
+    dst.reserve(len + 8);
+
     dst.put_u8(header);
-    put_length(data.len(), dst);
-    dst.put_slice(data);
+    put_length(len, dst);
+    dst.extend_from_slice(data);
 }
 
+#[derive(Error, Debug, PartialEq)]
 pub enum Error {}
 
 pub trait ResponseFrame {

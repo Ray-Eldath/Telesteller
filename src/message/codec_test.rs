@@ -1,10 +1,17 @@
 #![allow(non_snake_case)]
 
-use tokio_util::codec::FramedRead;
-use tokio_stream::StreamExt;
-use std::io::Cursor;
+use std::io::{Cursor, Read, Seek};
+use std::rc::Rc;
+
+use bytes::Buf;
+use futures::SinkExt;
 use hex_literal::hex;
+use tokio_stream::StreamExt;
+use tokio_util::codec::{FramedRead, FramedWrite};
+
 use super::codec::*;
+use super::Qos;
+use super::response::*;
 
 #[tokio::test]
 async fn test_read_CONNECT_SUBSCRIBE_PUBLISH() {
@@ -28,4 +35,23 @@ async fn test_read_CONNECT_SUBSCRIBE_PUBLISH() {
             Err(e) => panic!("Err: {:?}", e),
         }
     }
+}
+
+#[tokio::test]
+async fn test_write_CONNACK_SUBACK() {
+    let stream: Cursor<&mut [u8]> = Cursor::default();
+    let mut transport = FramedWrite::new(stream, MQTT311);
+    transport.send(Box::new(CONNACK {
+        session_present: true,
+        return_code: CONNACKReturnCode::Accepted,
+    })).await;
+    transport.send(Box::new(SUBACK {
+        id: 41235,
+        granted_qos: vec![Some(Qos::AcknowledgedDeliver), None, Some(Qos::FireAndForget), Some(Qos::AssuredDelivery)],
+    })).await;
+
+    assert_eq!(transport.write_buffer().to_vec(), &hex!("
+        20 02 01 00
+        90 06 a1 13 01 80 00 02
+    ")[..]);
 }

@@ -1,4 +1,6 @@
 pub(crate) use request::Request;
+pub(crate) use request::RequestFrame;
+pub(crate) use response::ResponseFrame;
 
 pub(crate) mod request;
 pub(crate) mod response;
@@ -14,7 +16,7 @@ mod response_test;
 #[macro_export]
 macro_rules! get {
     ($pos:expr, $subject:ident) => {
-        $subject.get($pos).ok_or(Error::MalformedRequest)?
+        $subject.get($pos).ok_or(super::request::Error::MalformedRequest)?
     };
 }
 
