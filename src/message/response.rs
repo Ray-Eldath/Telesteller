@@ -29,6 +29,7 @@ pub(super) fn put_length(x: usize, dst: &mut BytesMut) {
     }
 }
 
+#[inline]
 fn write_frame(header: u8, data: &[u8], dst: &mut BytesMut) {
     let len = data.len();
     dst.reserve(len + 8);

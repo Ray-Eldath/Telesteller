@@ -1,8 +1,7 @@
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use tokio::sync::broadcast::{self, error::SendError, Sender};
+use tokio::sync::broadcast::{self, error::SendError};
 
 use crate::message::request::PUBLISH;
 

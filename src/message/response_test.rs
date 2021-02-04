@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::BytesMut;
 use hex_literal::hex;
 
 use super::Qos;

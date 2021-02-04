@@ -1,8 +1,9 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="Run" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
-    <option name="command" value="run --package telesteller --bin telesteller" />
+    <option name="command" value="run --package telesteller --bin telesteller -- --log-filter &quot;debug&quot;" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
     <option name="channel" value="STABLE" />
+    <option name="requiredFeatures" value="true" />
     <option name="allFeatures" value="false" />
     <option name="emulateTerminal" value="false" />
     <option name="backtrace" value="SHORT" />

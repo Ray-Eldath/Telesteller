@@ -1,9 +1,7 @@
 #![allow(non_snake_case)]
 
-use std::io::{Cursor, Read, Seek};
-use std::rc::Rc;
+use std::io::Cursor;
 
-use bytes::Buf;
 use futures::SinkExt;
 use hex_literal::hex;
 use tokio_stream::StreamExt;

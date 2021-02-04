@@ -1,7 +1,5 @@
 #![allow(non_snake_case)]
 
-use std::ops::Deref;
-
 use bytes::Bytes;
 use hex_literal::hex;
 

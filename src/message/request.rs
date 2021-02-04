@@ -221,6 +221,7 @@ pub_struct!(PUBLISH {
     topic: String,
     id: Option<u16>,
     payload: Bytes,
+    raw: Bytes, // in order to route the frame to Subscriptions
 });
 
 impl RequestFrame for PUBLISH {
@@ -243,6 +244,7 @@ impl RequestFrame for PUBLISH {
             topic,
             id: unpack!(maybe_id),
             payload: Bytes::copy_from_slice(&bytes[cursor..]),
+            raw: bytes,
         })
     }
 }
