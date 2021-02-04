@@ -115,8 +115,16 @@ fn test_SUBSCRIBE() {
         "
         assert:
             eq [id, 41234],
-            eq [topic, "/testwill/will"],
-            eq [qos, Qos::AssuredDelivery]);
+            eq [subscriptions, vec![("/testwill/will".to_owned(), Qos::AssuredDelivery)]]);
+
+    test_success!(
+        test SUBSCRIBE with "
+            82 0e 75 fb 00 03 61 2f 62 01 00 03 63 2f 64 02
+        "
+        assert:
+            eq [id, 30203],
+            eq [subscriptions, vec![("a/b".to_owned(), Qos::AcknowledgedDeliver),
+                                     ("c/d".to_owned(), Qos::AssuredDelivery)] ]);
 }
 
 #[test]

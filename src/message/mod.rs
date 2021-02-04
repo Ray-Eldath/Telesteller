@@ -1,5 +1,4 @@
 pub(crate) use request::Request;
-pub(crate) use request::RequestFrame;
 pub(crate) use response::ResponseFrame;
 
 pub(crate) mod request;

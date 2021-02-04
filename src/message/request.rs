@@ -188,19 +188,28 @@ impl RequestFrame for CONNECT {
 
 pub_struct!(SUBSCRIBE {
     id: u16,
-    topic: String,
-    qos: Qos,
+    subscriptions: Vec<(String, Qos)>,
 });
 
 impl RequestFrame for SUBSCRIBE {
     fn from_bytes(bytes: Bytes) -> Result<Self, Error> where Self: Sized {
         assert_byte!(4 to 7 of get!(0, bytes), 0b0010);
 
+        let len = bytes.len();
+        let mut subscriptions = Vec::new();
         let mut cursor = 4;
+        loop {
+            if cursor >= len { break; }
+
+            let v = consume_item!(cursor of bytes);
+            let topic = into_text!(Topic whichis v);
+            subscriptions.push((topic, Qos::from_byte(get!(cursor, bytes))?));
+            cursor += 1;
+        }
+
         Ok(SUBSCRIBE {
             id: u16(&bytes[2..=3]),
-            topic: into_text!(Topic whichis consume_item!(cursor of bytes)),
-            qos: Qos::from_byte(&bytes[cursor])?,
+            subscriptions,
         })
     }
 }

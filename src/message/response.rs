@@ -1,5 +1,4 @@
 use bytes::{BufMut, BytesMut};
-use derive_more::From;
 use thiserror::Error;
 
 #[macro_use]
