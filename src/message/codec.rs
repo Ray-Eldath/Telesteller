@@ -1,6 +1,6 @@
 use std::io;
 
-use bytes::{Buf, Bytes, BytesMut};
+use bytes::{Buf, BytesMut};
 use thiserror::Error;
 use tokio_util::codec::{Decoder, Encoder, Framed};
 
@@ -10,6 +10,8 @@ use crate::message::{Request, ResponseFrame};
 
 pub(crate) struct MQTT311;
 
+pub(crate) type Transport = Framed<tokio::net::TcpStream, MQTT311>;
+
 #[derive(Error, Debug)]
 pub(crate) enum EncodeError {
     #[error("err {0} occurred while marshalling a Response.")]
@@ -18,10 +20,10 @@ pub(crate) enum EncodeError {
     IO(#[from] std::io::Error),
 }
 
-impl Encoder<Box<dyn ResponseFrame>> for MQTT311 {
+impl Encoder<Box<dyn ResponseFrame + Sync + Send>> for MQTT311 {
     type Error = EncodeError;
 
-    fn encode(&mut self, item: Box<dyn ResponseFrame>, dst: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: Box<dyn ResponseFrame + Sync + Send>, dst: &mut BytesMut) -> Result<(), Self::Error> {
         item.to_bytes(dst).map_err(|e| e.into())
     }
 }
@@ -55,6 +57,7 @@ impl Decoder for MQTT311 {
                                           format!("Frame is too large.")).into());
             }
             multiplier *= 128;
+            cursor += 1;
 
             if (byte & 128) == 0 { break; }
         }
