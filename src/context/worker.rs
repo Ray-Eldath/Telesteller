@@ -2,7 +2,7 @@ use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use tokio::sync::mpsc::{self, error::SendError};
+use tokio::sync::broadcast::{self, error::SendError, Sender};
 
 use crate::message::request::PUBLISH;
 
@@ -16,7 +16,7 @@ impl WorkerManager {
 
         let mut errors = Vec::new();
         for worker in self.workers.find(topic).iter() {
-            match worker.send(handle.clone()).await {
+            match worker.send(handle.clone()) {
                 Err(e) => errors.push(e),
                 _ => {}
             }
@@ -30,9 +30,14 @@ impl WorkerManager {
     }
 
     pub(crate) async fn subscribe(&mut self, topic: &str) -> Subscriber {
-        let (sender, receiver) = mpsc::channel(1024);
-        self.workers.add(topic, sender);
-        receiver
+        return match self.workers.find(topic) {
+            Some(publisher) => publisher.subscribe(),
+            None => {
+                let (tx, rx) = broadcast::channel(1024);
+                self.workers.add(topic, tx);
+                rx
+            }
+        };
     }
 
     pub(crate) fn new() -> WorkerManager {
@@ -42,36 +47,28 @@ impl WorkerManager {
     }
 }
 
-pub(crate) type Subscriber = mpsc::Receiver<Arc<PUBLISH>>;
-pub(crate) type WorkerHandle = mpsc::Sender<Arc<PUBLISH>>;
+pub(crate) type Subscriber = broadcast::Receiver<Arc<PUBLISH>>;
+pub(crate) type Publisher = broadcast::Sender<Arc<PUBLISH>>;
 
 trait WorkerRepository {
-    fn find(&self, topic: &str) -> Vec<&WorkerHandle>;
-    fn add(&mut self, topic: &str, worker_handle: WorkerHandle);
+    fn contains(&self, topic: &str) -> bool;
+    fn find(&self, topic: &str) -> Option<&Publisher>;
+    fn add(&mut self, topic: &str, publisher: Publisher);
     fn remove(&mut self, topic: &str);
     fn new() -> Self where Self: Sized;
 }
 
 struct DumbWorkerRepository {
-    repository: HashMap<String, Vec<Box<WorkerHandle>>>
+    repository: HashMap<String, Publisher>
 }
 
 impl WorkerRepository for DumbWorkerRepository {
-    fn find(&self, topic: &str) -> Vec<&WorkerHandle> {
-        match self.repository.get(topic) {
-            Some(handles) =>
-                handles.iter().map(|e| &**e).collect(),
-            None => Vec::new()
-        }
-    }
+    fn contains(&self, topic: &str) -> bool { self.repository.contains_key(topic) }
 
-    fn add(&mut self, topic: &str, worker_handle: WorkerHandle) {
-        match self.repository.entry(topic.to_owned()) {
-            Entry::Occupied(mut entry) =>
-                entry.get_mut().push(Box::new(worker_handle)),
-            Entry::Vacant(entry) =>
-                { entry.insert(Vec::new()); }
-        };
+    fn find(&self, topic: &str) -> Option<&Publisher> { self.repository.get(topic) }
+
+    fn add(&mut self, topic: &str, publisher: Publisher) {
+        self.repository.insert(topic.to_owned(), publisher);
     }
 
     fn remove(&mut self, topic: &str) {
