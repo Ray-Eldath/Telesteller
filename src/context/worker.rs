@@ -10,22 +10,13 @@ pub(crate) struct WorkerManager {
 }
 
 impl WorkerManager {
-    pub(crate) async fn dispatch(&self, topic: &str, message: PUBLISH) -> Result<(), Vec<SendError<Arc<PUBLISH>>>> {
+    pub(crate) async fn dispatch(&self, topic: &str, message: PUBLISH) -> Result<(), SendError<Arc<PUBLISH>>> {
         let handle = Arc::new(message);
-
-        let mut errors = Vec::new();
-        for worker in self.workers.find(topic).iter() {
-            match worker.send(handle.clone()) {
-                Err(e) => errors.push(e),
-                _ => {}
-            }
+        if let Some(publisher) = self.workers.find(topic) {
+            publisher.send(handle)?;
         }
 
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            Err(errors)
-        }
+        Ok(())
     }
 
     pub(crate) async fn subscribe(&mut self, topic: &str) -> Subscriber {
