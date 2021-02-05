@@ -163,3 +163,10 @@ fn test_PUBLISH() {
             eq [id, None],
             eq [payload, Bytes::new()]);
 }
+
+#[test]
+fn test_PINGREQ() {
+    test_success!(
+        test PINGREQ with "c0 00"
+        assert: );
+}

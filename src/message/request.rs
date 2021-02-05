@@ -71,6 +71,7 @@ pub(crate) enum Request {
     CONNECT(CONNECT),
     SUBSCRIBE(SUBSCRIBE),
     PUBLISH(PUBLISH),
+    PINGREQ(PINGREQ),
 }
 
 impl Request {
@@ -79,13 +80,16 @@ impl Request {
             0b0001 => Ok(CONNECT::from_bytes(bytes)?.into()),
             0b1000 => Ok(SUBSCRIBE::from_bytes(bytes)?.into()),
             0b0011 => Ok(PUBLISH::from_bytes(bytes)?.into()),
-            _ => return Err(Error::MalformedRequest)
+            0b1100 => Ok(PINGREQ::from_bytes(bytes)?.into()),
+            _ => return Err(Error::InvalidHeader(get!(0, bytes) >> 4))
         }
     }
 }
 
 #[derive(Error, Debug, PartialEq)]
 pub enum Error {
+    #[error("the header is invalid according to MQTT 3.1.1 spec.")]
+    InvalidHeader(u8),
     #[error("malformed request received. corresponding TCP connection will be closed according to MQTT 3.1.1 spec.")]
     MalformedRequest,
     #[error("non-UTF8 text in {0:?} received")]
@@ -246,5 +250,15 @@ impl RequestFrame for PUBLISH {
             payload: Bytes::copy_from_slice(&bytes[cursor..]),
             raw: bytes,
         })
+    }
+}
+
+pub_struct!(PINGREQ {});
+
+impl RequestFrame for PINGREQ {
+    fn from_bytes(bytes: Bytes) -> Result<Self, Error> where Self: Sized {
+        assert_byte!(4 to 7 of get!(0, bytes), 0);
+
+        Ok(PINGREQ {})
     }
 }

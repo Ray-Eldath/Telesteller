@@ -39,3 +39,8 @@ fn test_SUBACK() {
         granted_qos: vec![Some(Qos::FireAndForget)],
     }, "90 03 a1 13 00");
 }
+
+#[test]
+fn test_PINGRESP() {
+    test_success!(PINGRESP {}, "d0 00");
+}

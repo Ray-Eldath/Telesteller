@@ -89,3 +89,13 @@ impl ResponseFrame for SUBACK {
         Ok(())
     }
 }
+
+pub_struct!(PINGRESP {});
+
+impl ResponseFrame for PINGRESP {
+    fn to_bytes(&self, dst: &mut BytesMut) -> Result<(), Error> {
+        write_frame(208, &[], dst);
+
+        Ok(())
+    }
+}
