@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
-pub(crate) use worker::WorkerManager;
+pub(crate) use pub_sub::PublisherManager;
+pub(crate) use session::SessionManager;
 
-pub(crate) mod worker;
-
-pub(crate) struct Context {
-    worker_manager: Arc<WorkerManager>
-}
+pub(crate) mod pub_sub;
+pub(crate) mod session;

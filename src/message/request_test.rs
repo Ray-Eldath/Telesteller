@@ -137,6 +137,16 @@ fn test_SUBSCRIBE_malformed() {
 }
 
 #[test]
+fn test_UNSUBSCRIBE() {
+    test_success!(
+        test UNSUBSCRIBE with "a2 09 48 c9 00 05 2f 74 65 73 74"
+        assert:
+            eq [id, 18633],
+            eq [topics, vec!["/test"]]
+    );
+}
+
+#[test]
 fn test_PUBLISH() {
     // PUBLISH with Id (Qos = 2)
     test_success!(

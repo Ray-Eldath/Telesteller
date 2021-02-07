@@ -3,23 +3,32 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use tokio::net::TcpStream;
-use tokio::sync::{Mutex, Semaphore};
+use tokio::sync::{mpsc, RwLock, Semaphore};
 use tokio_stream::StreamExt;
 use tokio_util::codec::Framed;
 use tracing::warn;
 
-use crate::context::WorkerManager;
+use crate::context::SessionManager;
 use crate::message::codec::{DecodeError, MQTT311, Transport};
+use crate::message::Qos;
 use crate::message::request::{CONNECT, Request};
-use crate::server::SyncWorkerManager;
+use crate::server::{SyncSessionManager, SyncWorkerManager};
 use crate::util::Shutdown;
 
 mod conn;
 mod pub_sub;
 mod ping;
 
-#[derive(PartialEq)]
-struct Session;
+type Subscription = (String, Qos);
+
+#[derive(PartialEq, Clone)]
+pub(crate) struct Session;
+
+impl Default for Session {
+    fn default() -> Self {
+        Session
+    }
+}
 
 impl Debug for Session {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -48,7 +57,8 @@ pub(crate) struct Connection {
 pub(crate) struct Handler {
     connection: Connection,
     transport: Transport,
-    worker_manager: Arc<Mutex<WorkerManager>>,
+    worker_manager: Arc<SyncWorkerManager>,
+    session_manager: Arc<SyncSessionManager>,
     // shutdown: Shutdown,
     max_connections: Arc<Semaphore>,
 }
@@ -75,7 +85,9 @@ impl Handler {
                 Ok(request) =>
                     match request {
                         Request::CONNECT(request) => {
-                            if let Err(_) = request.apply(&mut self.connection, &mut self.transport).await {
+                            if let Err(_) = request.apply(&mut self.connection,
+                                                          &mut self.transport,
+                                                          &mut self.session_manager).await {
                                 return; // Err indicates the Network Connection should be closed.
                             }
                         }
@@ -85,6 +97,9 @@ impl Handler {
                                                           &mut self.worker_manager).await {
                                 return;
                             }
+                        }
+                        Request::UNSUBSCRIBE(request) => {
+                            // TODO
                         }
                         Request::PUBLISH(request) => {
                             if let Err(_) = request.apply(&self.connection,
@@ -110,6 +125,7 @@ impl Handler {
     pub fn new(transport: Framed<TcpStream, MQTT311>,
                addr: SocketAddr,
                worker_manager: Arc<SyncWorkerManager>,
+               session_manager: Arc<SyncSessionManager>,
                max_connections: Arc<Semaphore>) -> Handler {
         Handler {
             connection: Connection {
@@ -118,6 +134,7 @@ impl Handler {
             },
             transport,
             worker_manager,
+            session_manager,
             max_connections,
         }
     }

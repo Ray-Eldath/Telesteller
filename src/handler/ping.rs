@@ -16,7 +16,7 @@ impl PINGREQ {
         require_state!(PINGREQ requires State::Connected(..), &conn);
         debug!("PINGREQ received.");
 
-        transport.send(Box::new(PINGRESP {}));
+        transport.send(Box::new(PINGRESP {})).await;
 
         Ok(())
     }

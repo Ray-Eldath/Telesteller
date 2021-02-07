@@ -5,18 +5,8 @@ use tokio::net::TcpListener;
 use tokio::sync::{broadcast, Semaphore};
 use tracing::{info, Level};
 
-use telesteller::server::Server;
-
-#[derive(StructOpt, Debug)]
-#[structopt()]
-struct Opt {
-    #[structopt(short, long, default_value = "127.0.0.1:18990")]
-    addr: String,
-    #[structopt(long, default_value = "40960")]
-    max_connection: usize,
-    #[structopt(long, default_value = "info")]
-    log_filter: String,
-}
+use telesteller::Opt;
+use telesteller::Server;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -28,7 +18,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let (shutdown_tx, _) = broadcast::channel(1);
     let semaphore = Semaphore::new(opt.max_connection);
 
-    let mut server = Server::new(listener, shutdown_tx, Arc::new(semaphore));
+    let mut server = Server::new(opt, listener, shutdown_tx, Arc::new(semaphore));
     server.serve().await;
 
     Ok(())

@@ -5,14 +5,14 @@ use tokio::sync::broadcast::{self, error::SendError};
 
 use crate::message::request::PUBLISH;
 
-pub(crate) struct WorkerManager {
-    workers: Box<dyn WorkerRepository + Sync + Send>
+pub(crate) struct PublisherManager {
+    publishers: Box<dyn PublisherRepository + Sync + Send>
 }
 
-impl WorkerManager {
+impl PublisherManager {
     pub(crate) async fn dispatch(&self, topic: &str, message: PUBLISH) -> Result<(), SendError<Arc<PUBLISH>>> {
         let handle = Arc::new(message);
-        if let Some(publisher) = self.workers.find(topic) {
+        if let Some(publisher) = self.publishers.find(topic) {
             publisher.send(handle)?;
         }
 
@@ -20,19 +20,19 @@ impl WorkerManager {
     }
 
     pub(crate) async fn subscribe(&mut self, topic: &str) -> Subscriber {
-        return match self.workers.find(topic) {
+        return match self.publishers.find(topic) {
             Some(publisher) => publisher.subscribe(),
             None => {
                 let (tx, rx) = broadcast::channel(1024);
-                self.workers.add(topic, tx);
+                self.publishers.add(topic, tx);
                 rx
             }
         };
     }
 
-    pub(crate) fn new() -> WorkerManager {
-        WorkerManager {
-            workers: Box::new(DumbWorkerRepository::new())
+    pub(crate) fn new() -> PublisherManager {
+        PublisherManager {
+            publishers: Box::new(DumbPublisherRepository::new())
         }
     }
 }
@@ -40,7 +40,7 @@ impl WorkerManager {
 pub(crate) type Subscriber = broadcast::Receiver<Arc<PUBLISH>>;
 pub(crate) type Publisher = broadcast::Sender<Arc<PUBLISH>>;
 
-trait WorkerRepository {
+trait PublisherRepository {
     fn contains(&self, topic: &str) -> bool;
     fn find(&self, topic: &str) -> Option<&Publisher>;
     fn add(&mut self, topic: &str, publisher: Publisher);
@@ -48,11 +48,11 @@ trait WorkerRepository {
     fn new() -> Self where Self: Sized;
 }
 
-struct DumbWorkerRepository {
+struct DumbPublisherRepository {
     repository: HashMap<String, Publisher>
 }
 
-impl WorkerRepository for DumbWorkerRepository {
+impl PublisherRepository for DumbPublisherRepository {
     fn contains(&self, topic: &str) -> bool { self.repository.contains_key(topic) }
 
     fn find(&self, topic: &str) -> Option<&Publisher> { self.repository.get(topic) }
@@ -66,7 +66,7 @@ impl WorkerRepository for DumbWorkerRepository {
     }
 
     fn new() -> Self where Self: Sized {
-        DumbWorkerRepository {
+        DumbPublisherRepository {
             repository: HashMap::new()
         }
     }

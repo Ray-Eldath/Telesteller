@@ -74,6 +74,18 @@ pub_struct!(SUBACK {
     granted_qos: Vec<Option<Qos>>,
 });
 
+pub_struct!(UNSUBACK {
+    id: u16,
+});
+
+impl ResponseFrame for UNSUBACK {
+    fn to_bytes(&self, dst: &mut BytesMut) -> Result<(), Error> {
+        write_frame(176, &self.id.to_be_bytes(), dst);
+
+        Ok(())
+    }
+}
+
 impl ResponseFrame for SUBACK {
     fn to_bytes(&self, dst: &mut BytesMut) -> Result<(), Error> {
         let mut payload = self.id.to_be_bytes().to_vec();

@@ -70,6 +70,7 @@ fn u16(bytes: &[u8]) -> u16 {
 pub(crate) enum Request {
     CONNECT(CONNECT),
     SUBSCRIBE(SUBSCRIBE),
+    UNSUBSCRIBE(UNSUBSCRIBE),
     PUBLISH(PUBLISH),
     PINGREQ(PINGREQ),
 }
@@ -79,6 +80,7 @@ impl Request {
         match get!(0, bytes) >> 4 {
             0b0001 => Ok(CONNECT::from_bytes(bytes)?.into()),
             0b1000 => Ok(SUBSCRIBE::from_bytes(bytes)?.into()),
+            0b1010 => Ok(UNSUBSCRIBE::from_bytes(bytes)?.into()),
             0b0011 => Ok(PUBLISH::from_bytes(bytes)?.into()),
             0b1100 => Ok(PINGREQ::from_bytes(bytes)?.into()),
             _ => return Err(Error::InvalidHeader(get!(0, bytes) >> 4))
@@ -212,8 +214,35 @@ impl RequestFrame for SUBSCRIBE {
         }
 
         Ok(SUBSCRIBE {
-            id: u16(&bytes[2..=3]),
+            id: u16(get!(2..=3, bytes)),
             subscriptions,
+        })
+    }
+}
+
+pub_struct!(UNSUBSCRIBE {
+    id: u16,
+    topics: Vec<String>,
+});
+
+impl RequestFrame for UNSUBSCRIBE {
+    fn from_bytes(bytes: Bytes) -> Result<Self, Error> where Self: Sized {
+        assert_byte!(4 to 7 of get!(0, bytes), 0b0010);
+
+        let len = bytes.len();
+        let mut topics = Vec::new();
+        let mut cursor = 4;
+        loop {
+            if cursor >= len { break; }
+
+            let v = consume_item!(cursor of bytes);
+            topics.push(into_text!(Topic whichis v));
+            cursor += 1;
+        }
+
+        Ok(UNSUBSCRIBE {
+            id: u16(get!(2..=3, bytes)),
+            topics,
         })
     }
 }

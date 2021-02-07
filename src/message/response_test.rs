@@ -41,6 +41,13 @@ fn test_SUBACK() {
 }
 
 #[test]
+fn test_UNSUBACK() {
+    test_success!(UNSUBACK {
+        id: 18633
+    }, "b0 02 48 c9");
+}
+
+#[test]
 fn test_PINGRESP() {
     test_success!(PINGRESP {}, "d0 00");
 }
