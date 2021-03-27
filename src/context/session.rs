@@ -1,4 +1,4 @@
-use lru::LruCache;
+use std::collections::HashMap;
 
 use crate::handler::Session;
 
@@ -7,47 +7,54 @@ pub(crate) struct SessionManager {
 }
 
 impl SessionManager {
-    pub(crate) fn get(&mut self, client_id: &str) -> Option<&Session> { self.sessions.get(client_id) }
+    pub(crate) fn get(&self, client_id: &str) -> Option<&Session> { self.sessions.get(client_id) }
     pub(crate) fn get_mut(&mut self, client_id: &str) -> Option<&mut Session> { self.sessions.get_mut(client_id) }
     pub(crate) fn put(&mut self, client_id: &str, session: Session) { self.sessions.put(client_id, session) }
+    pub(crate) fn evict(&mut self, client_id: &str) { self.sessions.evict(client_id) }
 
     pub(crate) fn new(size: usize) -> Self {
         SessionManager {
-            sessions: Box::new(LruSessionRepository::new(size))
+            sessions: Box::new(HashMapSessionRepository::new())
         }
     }
 }
 
 trait SessionRepository {
-    fn get(&mut self, client_id: &str) -> Option<&Session>;
+    fn get(&self, client_id: &str) -> Option<&Session>;
     fn get_mut(&mut self, client_id: &str) -> Option<&mut Session>;
     fn put(&mut self, client_id: &str, session: Session);
-    fn new(size: usize) -> Self where Self: Sized;
+    fn evict(&mut self, client_id: &str);
+    fn new() -> Self where Self: Sized;
 }
 
-struct LruSessionRepository {
-    repository: LruCache<String, Session>
+struct HashMapSessionRepository {
+    repository: HashMap<String, Session>
 }
 
-impl SessionRepository for LruSessionRepository {
-    #[inline]
-    fn get(&mut self, client_id: &str) -> Option<&Session> {
+impl SessionRepository for HashMapSessionRepository {
+    fn get(&self, client_id: &str) -> Option<&Session> {
         self.repository.get(&client_id.to_owned())
     }
 
-    #[inline]
     fn get_mut(&mut self, client_id: &str) -> Option<&mut Session> {
         self.repository.get_mut(&client_id.to_owned())
     }
 
-    #[inline]
     fn put(&mut self, client_id: &str, session: Session) {
-        self.repository.put(client_id.to_owned(), session);
+        for (client_id, session) in self.repository.iter() {
+            println!("({}, {:?}) ", client_id, session);
+        }
+
+        self.repository.insert(client_id.to_owned(), session);
     }
 
-    fn new(size: usize) -> Self where Self: Sized {
-        LruSessionRepository {
-            repository: LruCache::new(size)
+    fn evict(&mut self, client_id: &str) {
+        self.repository.remove(client_id);
+    }
+
+    fn new() -> Self where Self: Sized {
+        HashMapSessionRepository {
+            repository: HashMap::new()
         }
     }
 }

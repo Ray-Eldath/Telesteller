@@ -4,7 +4,6 @@ use bytes::{Buf, BytesMut};
 use thiserror::Error;
 use tokio_util::codec::{Decoder, Encoder, Framed};
 
-#[macro_use]
 use crate::get;
 use crate::message::{Request, ResponseFrame};
 

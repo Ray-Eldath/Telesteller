@@ -180,3 +180,10 @@ fn test_PINGREQ() {
         test PINGREQ with "c0 00"
         assert: );
 }
+
+#[test]
+fn test_DISCONNECT() {
+    test_success!(
+        test DISCONNECT with "e0 00"
+        assert: );
+}

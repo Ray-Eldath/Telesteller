@@ -3,7 +3,6 @@ use std::sync::Arc;
 use structopt::StructOpt;
 use tokio::net::TcpListener;
 use tokio::sync::{broadcast, Semaphore};
-use tracing::{info, Level};
 
 use telesteller::Opt;
 use telesteller::Server;
@@ -19,7 +18,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let semaphore = Semaphore::new(opt.max_connection);
 
     let mut server = Server::new(opt, listener, shutdown_tx, Arc::new(semaphore));
-    server.serve().await;
+    server.serve().await?;
 
     Ok(())
 }

@@ -5,7 +5,6 @@ use crate::handler::Connection;
 use crate::message::codec::Transport;
 use crate::message::request::PINGREQ;
 use crate::message::response::PINGRESP;
-#[macro_use]
 use crate::require_state;
 
 use super::State;

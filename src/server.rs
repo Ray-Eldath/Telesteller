@@ -1,11 +1,10 @@
-use std::cell::RefCell;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use thiserror::Error;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{broadcast, Mutex, RwLock, Semaphore};
+use tokio::sync::{broadcast, RwLock, Semaphore};
 use tokio_util::codec::Framed;
 use tracing::{debug, info};
 
@@ -33,8 +32,8 @@ impl Server {
         loop {
             self.max_connections.acquire().await?.forget();
 
-            let (mut socket, addr) = self.accept().await?;
-            let mut transport = Framed::new(socket, MQTT311);
+            let (socket, addr) = self.accept().await?;
+            let transport = Framed::new(socket, MQTT311);
             let worker_manager = self.worker_manager.clone();
             let session_manager = self.session_manager.clone();
             let max_connections = self.max_connections.clone();

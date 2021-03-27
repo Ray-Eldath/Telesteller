@@ -1,7 +1,6 @@
 use bytes::{BufMut, BytesMut};
 use thiserror::Error;
 
-#[macro_use]
 use crate::pub_struct;
 
 use super::Qos;

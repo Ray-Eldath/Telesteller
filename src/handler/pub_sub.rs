@@ -1,21 +1,18 @@
 use std::pin::Pin;
 use std::sync::Arc;
 
-use bytes::BufMut;
-use futures::{Sink, SinkExt, StreamExt};
+use futures::{SinkExt, StreamExt};
 use tokio::io::AsyncWriteExt;
-use tokio::sync::{broadcast::error::RecvError, mpsc};
+use tokio::sync::{broadcast::error::RecvError};
 use tokio_stream::{Stream, StreamMap};
 use tracing::{debug, error, warn};
 
-use crate::handler::{Connection, log_error, Session, Subscription};
-use crate::message::{Request, request::PUBLISH};
+use crate::handler::{Connection, DesignatedSubscription, log_error, Subscription};
+use crate::message::{Qos, Request, response};
 use crate::message::codec::Transport;
-use crate::message::request::{SUBSCRIBE, UNSUBSCRIBE};
-use crate::message::response::UNSUBACK;
-#[macro_use]
+use crate::message::request::{PUBLISH, SUBSCRIBE};
 use crate::require_state;
-use crate::server::SyncWorkerManager;
+use crate::server::{SyncSessionManager, SyncWorkerManager};
 
 use super::State;
 
@@ -46,19 +43,39 @@ impl PUBLISH {
 type MessageStream = StreamMap<String, Pin<Box<dyn Stream<Item=Arc<PUBLISH>> + Send>>>;
 
 impl SUBSCRIBE {
-    #[tracing::instrument(name = "SUBSCRIBE::apply", level = "debug", skip(transport, worker_manager))]
+    #[tracing::instrument(name = "SUBSCRIBE::apply", level = "debug", skip(transport, worker_manager, session_manager))]
     pub(crate) async fn apply(
         self,
         conn: &mut Connection,
         transport: &mut Transport,
         worker_manager: &mut Arc<SyncWorkerManager>,
+        session_manager: &mut Arc<SyncSessionManager>,
+    ) -> Result<(), ()> {
+        debug!("SUBSCRIBE received.");
+
+        SUBSCRIBE::subscribe(&self.subscriptions, Some(self.id), conn, transport, worker_manager, session_manager).await?;
+        transport.send(Box::new(response::SUBACK {
+            id: self.id,
+            granted_qos: self.subscriptions.iter().map(|_| Some(Qos::FireAndForget)).collect(),
+        })).await;
+
+        Ok(())
+    }
+
+    #[tracing::instrument(name = "SUBSCRIBE::subscribe", level = "debug", skip(transport, worker_manager, session_manager))]
+    pub(crate) async fn subscribe(
+        topics: &Vec<Subscription>,
+        reply_to: Option<u16>,
+        conn: &mut Connection,
+        transport: &mut Transport,
+        worker_manager: &mut Arc<SyncWorkerManager>,
+        session_manager: &mut Arc<SyncSessionManager>,
     ) -> Result<(), ()> {
         require_state!(SUBSCRIBE requires State::Connected(..), &conn);
-        debug!("SUBSCRIBE received.");
 
         let mut subscriptions = StreamMap::new();
 
-        SUBSCRIBE::subscribe_topics(&self.subscriptions, conn, &mut subscriptions, worker_manager).await;
+        SUBSCRIBE::subscribe_topics(&topics, (transport, reply_to), conn, &mut subscriptions, worker_manager).await;
 
         loop {
             tokio::select! {
@@ -71,11 +88,19 @@ impl SUBSCRIBE {
                         Ok(request) =>
                             match request {
                                 Request::SUBSCRIBE(request) => {
-                                    SUBSCRIBE::subscribe_topics(&request.subscriptions, conn, &mut subscriptions, worker_manager).await;
+                                    SUBSCRIBE::subscribe_topics(&topics,
+                                                                (transport, Some(request.id)),
+                                                                conn,
+                                                                &mut subscriptions,
+                                                                worker_manager).await;
                                 }
-                                // Request::UNSUBSCRIBE(request) => request.apply(conn, transport).await?,
+                                Request::UNSUBSCRIBE(request) => SUBSCRIBE::unsubscribe_topics(&request.topics, &mut subscriptions),
                                 Request::PUBLISH(request) => request.apply(conn, transport, worker_manager).await?,
                                 Request::PINGREQ(request) => request.apply(conn, transport).await?,
+                                Request::DISCONNECT(request) => {
+                                    request.apply(conn, transport, session_manager).await?;
+                                    return Ok(());
+                                },
                                 _ => return Err(())
                             }
                         Err(err) => log_error(&conn.addr, err),
@@ -85,13 +110,23 @@ impl SUBSCRIBE {
         }
     }
 
+    #[tracing::instrument(name = "SUBSCRIBE::subscribe_topics", level = "debug", skip(reply_to, subscriptions, worker_manager))]
     async fn subscribe_topics(
         topics: &Vec<Subscription>,
-        connection: &Connection,
+        reply_to: (&mut Transport, Option<u16>),
+        connection: &mut Connection,
         subscriptions: &mut MessageStream,
         worker_manager: &mut Arc<SyncWorkerManager>,
     ) {
-        for (topic, qos) in topics.iter() {
+        let session = match &mut connection.state {
+            State::Connected(_, session) => session,
+            _ => return,
+        };
+
+        let mut granted_qos = Vec::new();
+        for (topic, qos) in topics {
+            session.subscriptions.insert(DesignatedSubscription { topic: topic.clone(), qos: qos.clone() });
+
             let topic_handle = topic.clone();
 
             let mut subscriber = worker_manager.write().await.subscribe(&topic).await;
@@ -112,6 +147,20 @@ impl SUBSCRIBE {
             });
 
             subscriptions.insert(topic_handle, stream);
+            granted_qos.push(Some(Qos::FireAndForget));
+        }
+
+        if let (transport, Some(id)) = reply_to {
+            transport.send(Box::new(response::SUBACK {
+                id,
+                granted_qos,
+            })).await;
+        }
+    }
+
+    fn unsubscribe_topics(topics: &Vec<String>, subscriptions: &mut MessageStream) {
+        for topic in topics.iter() {
+            subscriptions.remove(topic);
         }
     }
 }

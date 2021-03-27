@@ -7,12 +7,15 @@ High-performance, lightweight, reliable MQTT Broker implemented in Rust.
 - [ ] MQTT 3.1.1
 
     - [x] CONN, PUB/SUB, PING
-    - [ ] Session
+    - [x] Session
     - [ ] Retain Messages
     - [ ] LWT
-    - [ ] Qos 1, 2
+    - [ ] Qos
+        - [ ] Qos 0 (`PUBLISH`)
+        - [ ] Qos 1 (`PUBACK`)
+        - [ ] Qos 2 (`PUBREC`, `PUBREL`, `PUBCOMP`)
     - [ ] Topic Filter
 - [ ] Benchmark
 - [ ] Integration tests
 - [ ] CI/CD
-- [ ] docs
+- [ ] Documentations

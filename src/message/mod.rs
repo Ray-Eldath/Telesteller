@@ -29,7 +29,7 @@ macro_rules! pub_struct {
     }
 }
 
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Copy, Clone)]
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Copy, Clone, Hash)]
 pub enum Qos {
     FireAndForget = 0,
     AcknowledgedDeliver = 1,

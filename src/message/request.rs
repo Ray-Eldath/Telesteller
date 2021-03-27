@@ -4,7 +4,6 @@ use bytes::Bytes;
 use derive_more::From;
 use thiserror::Error;
 
-#[macro_use]
 use crate::{get, pub_struct};
 use crate::message::Qos;
 use crate::util::ext::BoolExt;
@@ -73,6 +72,7 @@ pub(crate) enum Request {
     UNSUBSCRIBE(UNSUBSCRIBE),
     PUBLISH(PUBLISH),
     PINGREQ(PINGREQ),
+    DISCONNECT(DISCONNECT),
 }
 
 impl Request {
@@ -83,6 +83,7 @@ impl Request {
             0b1010 => Ok(UNSUBSCRIBE::from_bytes(bytes)?.into()),
             0b0011 => Ok(PUBLISH::from_bytes(bytes)?.into()),
             0b1100 => Ok(PINGREQ::from_bytes(bytes)?.into()),
+            0b1110 => Ok(DISCONNECT::from_bytes(bytes)?.into()),
             _ => return Err(Error::InvalidHeader(get!(0, bytes) >> 4))
         }
     }
@@ -289,5 +290,15 @@ impl RequestFrame for PINGREQ {
         assert_byte!(4 to 7 of get!(0, bytes), 0);
 
         Ok(PINGREQ {})
+    }
+}
+
+pub_struct!(DISCONNECT {});
+
+impl RequestFrame for DISCONNECT {
+    fn from_bytes(bytes: Bytes) -> Result<Self, Error> where Self: Sized {
+        assert_byte!(4 to 7 of get!(0, bytes), 0);
+
+        Ok(DISCONNECT {})
     }
 }

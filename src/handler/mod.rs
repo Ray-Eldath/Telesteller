@@ -1,19 +1,18 @@
-use std::fmt::{self, Debug};
+use std::collections::HashSet;
+use std::fmt::{self, Debug, Formatter};
 use std::net::SocketAddr;
 use std::sync::Arc;
 
 use tokio::net::TcpStream;
-use tokio::sync::{mpsc, RwLock, Semaphore};
+use tokio::sync::Semaphore;
 use tokio_stream::StreamExt;
 use tokio_util::codec::Framed;
 use tracing::warn;
 
-use crate::context::SessionManager;
 use crate::message::codec::{DecodeError, MQTT311, Transport};
 use crate::message::Qos;
 use crate::message::request::{CONNECT, Request};
 use crate::server::{SyncSessionManager, SyncWorkerManager};
-use crate::util::Shutdown;
 
 mod conn;
 mod pub_sub;
@@ -21,29 +20,52 @@ mod ping;
 
 type Subscription = (String, Qos);
 
-#[derive(PartialEq, Clone)]
-pub(crate) struct Session;
+#[derive(Clone, Eq, Hash)]
+pub(crate) struct DesignatedSubscription {
+    topic: String,
+    qos: Qos,
+}
+
+impl Debug for DesignatedSubscription {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "({}, {:?})", &self.topic, &self.qos)
+    }
+}
+
+impl PartialEq for DesignatedSubscription {
+    fn eq(&self, other: &Self) -> bool { self.topic == other.topic }
+}
+
+impl From<Subscription> for DesignatedSubscription {
+    fn from(subscription: (String, Qos)) -> Self {
+        DesignatedSubscription {
+            topic: subscription.0,
+            qos: subscription.1,
+        }
+    }
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub(crate) struct Session {
+    pub(crate) subscriptions: HashSet<DesignatedSubscription>
+}
 
 impl Default for Session {
     fn default() -> Self {
-        Session
+        Session {
+            subscriptions: HashSet::default()
+        }
     }
 }
 
-impl Debug for Session {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("Session")
-    }
-}
-
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 enum State {
     /// TCP connection just established, and no handshake packages received.
     Established,
     /// CONNECT received and verified, CONNACK replied.
     Connected(CONNECT, Session),
-    /// Gracefully disconnect occurred, cleaning state.
-    Disconnecting,
+    /// All Session data are persisted and current connection had been closed.
+    Disconnected,
     /// Ungracefully disconnect occurred, cleaning state and sending LWT.
     Cleaning,
 }
@@ -87,6 +109,7 @@ impl Handler {
                         Request::CONNECT(request) => {
                             if let Err(_) = request.apply(&mut self.connection,
                                                           &mut self.transport,
+                                                          &mut self.worker_manager,
                                                           &mut self.session_manager).await {
                                 return; // Err indicates the Network Connection should be closed.
                             }
@@ -94,12 +117,16 @@ impl Handler {
                         Request::SUBSCRIBE(request) => {
                             if let Err(_) = request.apply(&mut self.connection,
                                                           &mut self.transport,
-                                                          &mut self.worker_manager).await {
+                                                          &mut self.worker_manager,
+                                                          &mut self.session_manager).await {
                                 return;
                             }
                         }
-                        Request::UNSUBSCRIBE(request) => {
-                            // TODO
+                        Request::UNSUBSCRIBE(_) => {
+                            // if there's subscriptions in the previous session, the connection has
+                            // already intercepted by an infinite loop in CONNECT::apply, so code here
+                            // only executed when a user trying to Unsubscribe without any subscriptions.
+                            // this may causes a Protocol Violation, but here we just do nothing.
                         }
                         Request::PUBLISH(request) => {
                             if let Err(_) = request.apply(&self.connection,
@@ -110,6 +137,13 @@ impl Handler {
                         }
                         Request::PINGREQ(request) => {
                             if let Err(_) = request.apply(&self.connection, &mut self.transport).await {
+                                return;
+                            }
+                        }
+                        Request::DISCONNECT(request) => {
+                            if let Err(_) = request.apply(&mut self.connection,
+                                                          &mut self.transport,
+                                                          &mut self.session_manager).await {
                                 return;
                             }
                         }
